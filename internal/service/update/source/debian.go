@@ -6,8 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/divpro/cve/internal/entity"
-
+	"github.com/divpro/cve/internal/entity/cve"
 	"github.com/rs/zerolog/log"
 )
 
@@ -25,7 +24,7 @@ func NewDebian() Source {
 	}
 }
 
-func (s debian) Download(ctx context.Context) ([]entity.CVE, error) {
+func (s debian) Download(ctx context.Context) ([]cve.CVE, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.url, nil)
 	if err != nil {
 		return nil, err
@@ -47,13 +46,13 @@ func (s debian) Download(ctx context.Context) ([]entity.CVE, error) {
 		return nil, err
 	}
 
-	var result []entity.CVE
+	var result []cve.CVE
 	for packageName, items := range packages {
-		for id, cve := range items {
-			result = append(result, entity.CVE{
+		for id, item := range items {
+			result = append(result, cve.CVE{
 				PackageName: packageName,
 				ID:          id,
-				Body:        string(cve),
+				Body:        string(item),
 				Source:      sourceDebian,
 			})
 		}

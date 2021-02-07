@@ -8,22 +8,16 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/divpro/cve/internal/entity"
-
-	"github.com/divpro/cve/internal/service/lock"
-
-	"github.com/jmoiron/sqlx"
-
-	"github.com/divpro/cve/internal/service/get"
-
 	"github.com/divpro/cve/internal/config"
+	"github.com/divpro/cve/internal/entity/cve"
+	"github.com/divpro/cve/internal/entity/lock"
+	"github.com/divpro/cve/internal/service/get"
 	"github.com/divpro/cve/internal/service/update"
-
-	"github.com/rs/zerolog/log"
-
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	_ "github.com/jackc/pgx/stdlib"
+	"github.com/jmoiron/sqlx"
+	"github.com/rs/zerolog/log"
 )
 
 type app struct {
@@ -68,7 +62,7 @@ func (a *app) initDB(conf *config.Config) error {
 
 func (a *app) initServices(*config.Config) error {
 	svcLock := lock.New(a.db)
-	cveRepo := entity.NewCVERepo(a.db)
+	cveRepo := cve.NewCVERepo(a.db)
 
 	a.svc.update = update.New(cveRepo, svcLock)
 	a.svc.get = get.New(cveRepo)

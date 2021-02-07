@@ -9,8 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/divpro/cve/internal/entity"
-
+	"github.com/divpro/cve/internal/entity/cve"
 	"github.com/rs/zerolog/log"
 )
 
@@ -28,7 +27,7 @@ func NewRedhat() Source {
 	}
 }
 
-func (s redhat) Download(ctx context.Context) ([]entity.CVE, error) {
+func (s redhat) Download(ctx context.Context) ([]cve.CVE, error) {
 	// process list pages
 
 	// name => url
@@ -79,8 +78,8 @@ func (s redhat) Download(ctx context.Context) ([]entity.CVE, error) {
 	}
 	close(urls)
 	errs := make(chan error, len(urlMap))
-	cve := make(chan entity.CVE)
-	var result []entity.CVE
+	items := make(chan cve.CVE)
+	var result []cve.CVE
 
 	const workerCount = 100
 	var wg sync.WaitGroup
@@ -127,7 +126,7 @@ func (s redhat) Download(ctx context.Context) ([]entity.CVE, error) {
 				}
 
 				for _, p := range item.Packages {
-					cve <- entity.CVE{
+					items <- cve.CVE{
 						ID:          item.Name,
 						PackageName: p.Package,
 						Body:        string(b),
@@ -144,7 +143,7 @@ func (s redhat) Download(ctx context.Context) ([]entity.CVE, error) {
 			select {
 			case err := <-errs:
 				log.Error().Err(err).Msg("cve page")
-			case item := <-cve:
+			case item := <-items:
 				result = append(result, item)
 			default:
 				break

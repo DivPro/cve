@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/rs/zerolog/log"
-
+	"github.com/divpro/cve/internal/entity/cve"
 	"github.com/go-chi/chi"
-
-	"github.com/divpro/cve/internal/entity"
+	"github.com/rs/zerolog/log"
 )
 
 type Service interface {
@@ -16,10 +14,10 @@ type Service interface {
 }
 
 type service struct {
-	db entity.CVERepo
+	db cve.Repository
 }
 
-func New(db entity.CVERepo) Service {
+func New(db cve.Repository) Service {
 	return &service{
 		db: db,
 	}
@@ -31,7 +29,7 @@ func (s *service) GetById(w http.ResponseWriter, r *http.Request) {
 	pkg := q.Get("pkg")
 	id := chi.URLParam(r, "id")
 
-	cve, err := s.db.Find(r.Context(), &entity.CVEFindFilter{
+	models, err := s.db.Find(r.Context(), &cve.FindFilter{
 		ID:      id,
 		Package: pkg,
 		Source:  source,
@@ -46,7 +44,7 @@ func (s *service) GetById(w http.ResponseWriter, r *http.Request) {
 
 	enc := json.NewEncoder(w)
 	enc.SetIndent("\t", "")
-	err = enc.Encode(cve)
+	err = enc.Encode(models)
 	if err != nil {
 		log.Error().Err(err).Msg("encode cve response")
 	}

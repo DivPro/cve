@@ -1,4 +1,4 @@
-package entity
+package cve
 
 import (
 	"context"
@@ -17,22 +17,22 @@ type CVE struct {
 	CreatedAt   time.Time `db:"created_at" json:"created_at"`
 }
 
-type CVEFindFilter struct {
+type FindFilter struct {
 	ID      string `db:"id"`
 	Package string `db:"package"`
 	Source  string `db:"source"`
 }
 
-type CVERepo interface {
+type Repository interface {
 	Replace(ctx context.Context, cve []CVE) error
-	Find(ctx context.Context, filter *CVEFindFilter) ([]CVE, error)
+	Find(ctx context.Context, filter *FindFilter) ([]CVE, error)
 }
 
 type cveRepo struct {
 	db *sqlx.DB
 }
 
-func NewCVERepo(db *sqlx.DB) CVERepo {
+func NewCVERepo(db *sqlx.DB) Repository {
 	return cveRepo{db: db}
 }
 
@@ -73,7 +73,7 @@ func (r cveRepo) Replace(ctx context.Context, cve []CVE) error {
 	return nil
 }
 
-func (r cveRepo) Find(ctx context.Context, filter *CVEFindFilter) ([]CVE, error) {
+func (r cveRepo) Find(ctx context.Context, filter *FindFilter) ([]CVE, error) {
 	dest := make([]CVE, 0)
 	q := strings.Builder{}
 	q.WriteString(`SELECT

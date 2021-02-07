@@ -3,7 +3,7 @@ package source
 import (
 	"context"
 
-	"github.com/divpro/cve/internal/entity"
+	"github.com/divpro/cve/internal/entity/cve"
 )
 
 const (
@@ -12,6 +12,6 @@ const (
 )
 
 type Source interface {
-	Download(ctx context.Context) ([]entity.CVE, error)
+	Download(ctx context.Context) ([]cve.CVE, error)
 	GetName() string
 }

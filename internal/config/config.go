@@ -2,11 +2,8 @@ package config
 
 import (
 	"errors"
-	"flag"
 	"fmt"
-	"os"
 	"strings"
-	"sync"
 
 	"github.com/rs/zerolog"
 )
@@ -20,48 +17,21 @@ type Config struct {
 }
 
 const (
-	nameAddr        = "http_addr"
-	defaultAddr     = "0.0.0.0"
-	namePort        = "http_port"
-	defaultPort     = "80"
-	nameLogLevel    = "log_level"
-	defaultLogLevel = "info"
+	NameAddr        = "http_addr"
+	DefaultAddr     = "0.0.0.0"
+	NamePort        = "http_port"
+	DefaultPort     = "80"
+	NameLogLevel    = "log_level"
+	DefaultLogLevel = "info"
 )
 
 var (
-	parseFlagsOnce sync.Once
-
-	ErrHttpAddr = errors.New(nameAddr)
-	ErrHttpPort = errors.New(namePort)
-	ErrLogLevel = errors.New(nameLogLevel)
+	ErrHttpAddr = errors.New(NameAddr)
+	ErrHttpPort = errors.New(NamePort)
+	ErrLogLevel = errors.New(NameLogLevel)
 )
 
-func New() (*Config, error) {
-	conf := new(Config)
-
-	parseFlagsOnce.Do(func() {
-		flag.StringVar(&conf.HttpAddr, nameAddr, defaultAddr, "http addr")
-		flag.StringVar(&conf.HttpPort, namePort, defaultPort, "http port")
-		flag.StringVar(&conf.LogLevel, nameLogLevel, defaultLogLevel, "log level")
-
-		flag.Parse()
-
-		dbDSN := os.Getenv("DB_CONN")
-		if dbDSN == "" {
-			conf.DBConn = "postgres://pg-user:pg-pass@127.0.0.1:5432/pg-db"
-		} else {
-			conf.DBConn = dbDSN
-		}
-	})
-
-	if err := conf.valid(); err != nil {
-		return nil, err
-	}
-
-	return conf, nil
-}
-
-func (c Config) valid() error {
+func (c Config) Valid() error {
 	var errs []error
 
 	if c.HttpAddr == "" {

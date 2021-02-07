@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/divpro/cve/internal/entity"
+	"github.com/divpro/cve/internal/entity/cve"
 
-	"github.com/divpro/cve/internal/service/lock"
+	"github.com/divpro/cve/internal/entity/lock"
 	"github.com/divpro/cve/internal/service/update/source"
 	"github.com/rs/zerolog/log"
 )
@@ -20,13 +20,13 @@ type Service interface {
 }
 
 type service struct {
-	db      entity.CVERepo
+	db      cve.Repository
 	srvLock lock.Service
 	sources []source.Source
 }
 
 func New(
-	db entity.CVERepo,
+	db cve.Repository,
 	srvLock lock.Service,
 ) Service {
 	return &service{
@@ -41,7 +41,11 @@ func New(
 
 func (s *service) PostUpdate(w http.ResponseWriter, r *http.Request) {
 	const lockID = int64(1)
-	l, err := s.srvLock.AcquireNoWait(r.Context(), lockID)
+	l, err := s.srvLock.Acquire(r.Context(), lockID, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+		defer cancel()
+		s.processUpdate(ctx)
+	})
 	if err != nil {
 		if errors.Is(err, lock.ErrLockExists) {
 			w.WriteHeader(http.StatusLocked)
@@ -57,32 +61,18 @@ func (s *service) PostUpdate(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-
 	_, err = w.Write([]byte(fmt.Sprintf(
 		"lock acquired [ #%d ] at %s", l.GetID(), l.GetAcquiredAt().Format(time.RFC3339))),
 	)
 	if err != nil {
 		log.Error().Err(err).Msg("write response")
 	}
-
-	go s.processWithLock(l)
 }
 
-func (s *service) processWithLock(l *lock.Lock) {
-	s.processUpdate()
-
-	err := s.srvLock.Release(context.Background(), l)
-	if err != nil {
-		log.Error().Err(err).Msg("lock release")
-	}
-
-	log.Debug().Int64("id", l.GetID()).Msg("lock released")
-}
-
-func (s *service) processUpdate() {
+func (s *service) processUpdate(ctx context.Context) {
 	var (
-		cve []entity.CVE
-		wg  sync.WaitGroup
+		models []cve.CVE
+		wg     sync.WaitGroup
 	)
 	wg.Add(len(s.sources))
 	for _, src := range s.sources {
@@ -102,17 +92,16 @@ func (s *service) processUpdate() {
 				TimeDiff("download", time.Now(), t).
 				Msg("download completed")
 
-			cve = append(cve, sourceCVE...)
+			models = append(models, sourceCVE...)
 		}()
 	}
 	wg.Wait()
-	log.Info().Int("count", len(cve)).Msg("cve download completed")
+	log.Info().Int("count", len(models)).Msg("cve download completed")
 
-	ctx := context.Background()
-	err := s.db.Replace(ctx, cve)
+	err := s.db.Replace(ctx, models)
 	if err != nil {
 		log.Error().Err(err).Msg("truncate old")
 	}
 
-	log.Info().Int("count", len(cve)).Msg("cve created")
+	log.Info().Int("count", len(models)).Msg("cve created")
 }
