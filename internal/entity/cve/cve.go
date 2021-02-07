@@ -23,20 +23,21 @@ type FindFilter struct {
 	Source  string `db:"source"`
 }
 
+//go:generate mockery --name=Repository --case underscore
 type Repository interface {
 	Replace(ctx context.Context, cve []CVE) error
 	Find(ctx context.Context, filter *FindFilter) ([]CVE, error)
 }
 
-type cveRepo struct {
+type repository struct {
 	db *sqlx.DB
 }
 
 func NewCVERepo(db *sqlx.DB) Repository {
-	return cveRepo{db: db}
+	return repository{db: db}
 }
 
-func (r cveRepo) Replace(ctx context.Context, cve []CVE) error {
+func (r repository) Replace(ctx context.Context, cve []CVE) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("%w while get db transaction", err)
@@ -47,7 +48,9 @@ func (r cveRepo) Replace(ctx context.Context, cve []CVE) error {
 
 	q, err := tx.PrepareNamedContext(
 		ctx,
-		"INSERT INTO cve (id, package, body, source) VALUES (:id, :package, :body, :source)",
+		`INSERT INTO cve (id, package, body, source)
+			VALUES (:id, :package, :body, :source)
+			ON CONFLICT DO NOTHING`,
 	)
 	if err != nil {
 		return fmt.Errorf("%w while prepare insert query", err)
@@ -73,7 +76,7 @@ func (r cveRepo) Replace(ctx context.Context, cve []CVE) error {
 	return nil
 }
 
-func (r cveRepo) Find(ctx context.Context, filter *FindFilter) ([]CVE, error) {
+func (r repository) Find(ctx context.Context, filter *FindFilter) ([]CVE, error) {
 	dest := make([]CVE, 0)
 	q := strings.Builder{}
 	q.WriteString(`SELECT

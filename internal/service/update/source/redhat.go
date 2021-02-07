@@ -32,7 +32,7 @@ func (s redhat) Download(ctx context.Context) ([]cve.CVE, error) {
 
 	// name => url
 	urlMap := make(map[string]string)
-	const perPage = 5000
+	const perPage = 500
 	pageNum := 0
 	for {
 		pageNum++
@@ -40,12 +40,16 @@ func (s redhat) Download(ctx context.Context) ([]cve.CVE, error) {
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("new request: %w", err)
 		}
 
 		resp, err := s.client.Do(req)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("request processing: %w", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("response error: %v", resp)
 		}
 
 		var items []struct {
@@ -55,8 +59,10 @@ func (s redhat) Download(ctx context.Context) ([]cve.CVE, error) {
 		dec := json.NewDecoder(resp.Body)
 		err = dec.Decode(&items)
 		if err != nil {
-			return nil, err
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("decode redhat response: %w", err)
 		}
+		_ = resp.Body.Close()
 
 		if len(items) == 0 {
 			break
@@ -80,13 +86,14 @@ func (s redhat) Download(ctx context.Context) ([]cve.CVE, error) {
 	errs := make(chan error, len(urlMap))
 	items := make(chan cve.CVE)
 	var result []cve.CVE
-
-	const workerCount = 100
 	var wg sync.WaitGroup
+	const workerCount = 100
 	wg.Add(workerCount)
 	for i := 0; i < workerCount; i++ {
 		go func() {
-			defer wg.Done()
+			defer func() {
+				wg.Done()
+			}()
 			for url := range urls {
 				log.Debug().Str("url", url).Msg("processing cve url")
 
@@ -117,6 +124,9 @@ func (s redhat) Download(ctx context.Context) ([]cve.CVE, error) {
 					Packages []struct {
 						Package string `json:"package"`
 					} `json:"affected_release"`
+					PackageState []struct {
+						Package string `json:"package_name"`
+					} `json:"package_state"`
 				}
 				err = json.Unmarshal(b, &item)
 				if err != nil {
@@ -133,23 +143,35 @@ func (s redhat) Download(ctx context.Context) ([]cve.CVE, error) {
 						Source:      sourceRedhat,
 					}
 				}
+				for _, p := range item.PackageState {
+					items <- cve.CVE{
+						ID:          item.Name,
+						PackageName: p.Package,
+						Body:        string(b),
+						Source:      sourceRedhat,
+					}
+				}
 			}
 		}()
 	}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+	OUTER:
 		for {
 			select {
 			case err := <-errs:
 				log.Error().Err(err).Msg("cve page")
-			case item := <-items:
+			case item, ok := <-items:
+				if !ok {
+					break OUTER
+				}
 				result = append(result, item)
-			default:
-				break
 			}
 		}
 	}()
+
 	wg.Wait()
 
 	return result, nil

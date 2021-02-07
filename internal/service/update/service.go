@@ -2,74 +2,41 @@ package update
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"net/http"
 	"sync"
 	"time"
 
 	"github.com/divpro/cve/internal/entity/cve"
-
 	"github.com/divpro/cve/internal/entity/lock"
 	"github.com/divpro/cve/internal/service/update/source"
 	"github.com/rs/zerolog/log"
 )
 
 type Service interface {
-	PostUpdate(w http.ResponseWriter, r *http.Request)
+	Update(ctx context.Context)
+	Acquire(ctx context.Context, id int64, worker lock.WorkerFn) (lock.Lock, error)
 }
 
 type service struct {
-	db      cve.Repository
-	srvLock lock.Service
+	cveRepo cve.Repository
+	srvLock lock.Repository
 	sources []source.Source
 }
 
 func New(
 	db cve.Repository,
-	srvLock lock.Service,
+	srvLock lock.Repository,
 ) Service {
 	return &service{
-		db:      db,
+		cveRepo: db,
 		srvLock: srvLock,
 		sources: []source.Source{
 			source.NewDebian(),
-			//source.NewRedhat(),
+			source.NewRedhat(),
 		},
 	}
 }
 
-func (s *service) PostUpdate(w http.ResponseWriter, r *http.Request) {
-	const lockID = int64(1)
-	l, err := s.srvLock.Acquire(r.Context(), lockID, func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
-		defer cancel()
-		s.processUpdate(ctx)
-	})
-	if err != nil {
-		if errors.Is(err, lock.ErrLockExists) {
-			w.WriteHeader(http.StatusLocked)
-			_, _ = w.Write([]byte("update operation in progress"))
-			log.Warn().Err(err).Msg("lock acquire")
-
-			return
-		}
-
-		log.Error().Err(err).Msg("lock acquire")
-
-		w.WriteHeader(http.StatusInternalServerError)
-
-		return
-	}
-	_, err = w.Write([]byte(fmt.Sprintf(
-		"lock acquired [ #%d ] at %s", l.GetID(), l.GetAcquiredAt().Format(time.RFC3339))),
-	)
-	if err != nil {
-		log.Error().Err(err).Msg("write response")
-	}
-}
-
-func (s *service) processUpdate(ctx context.Context) {
+func (s *service) Update(ctx context.Context) {
 	var (
 		models []cve.CVE
 		wg     sync.WaitGroup
@@ -98,10 +65,14 @@ func (s *service) processUpdate(ctx context.Context) {
 	wg.Wait()
 	log.Info().Int("count", len(models)).Msg("cve download completed")
 
-	err := s.db.Replace(ctx, models)
+	err := s.cveRepo.Replace(ctx, models)
 	if err != nil {
 		log.Error().Err(err).Msg("truncate old")
 	}
 
 	log.Info().Int("count", len(models)).Msg("cve created")
+}
+
+func (s *service) Acquire(ctx context.Context, id int64, worker lock.WorkerFn) (lock.Lock, error) {
+	return s.srvLock.Acquire(ctx, id, worker)
 }

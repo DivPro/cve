@@ -30,21 +30,22 @@ func (l lock) GetAcquiredAt() time.Time {
 	return l.acquired
 }
 
-type Service interface {
+//go:generate mockery --name=Repository --case underscore
+type Repository interface {
 	Acquire(ctx context.Context, id int64, worker WorkerFn) (Lock, error)
 }
 
-type service struct {
+type repository struct {
 	db *sqlx.DB
 }
 
 var ErrLockExists = errors.New("lock already acquired")
 
-func New(db *sqlx.DB) Service {
-	return &service{db: db}
+func New(db *sqlx.DB) Repository {
+	return &repository{db: db}
 }
 
-func (s *service) Acquire(ctx context.Context, id int64, worker WorkerFn) (Lock, error) {
+func (s *repository) Acquire(ctx context.Context, id int64, worker WorkerFn) (Lock, error) {
 	conn, err := s.db.Connx(ctx)
 	if err != nil {
 		return nil, err

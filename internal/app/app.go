@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/divpro/cve/internal/app/handler"
 	"github.com/divpro/cve/internal/config"
 	"github.com/divpro/cve/internal/entity/cve"
 	"github.com/divpro/cve/internal/entity/lock"
@@ -23,54 +24,47 @@ import (
 type app struct {
 	server *http.Server
 	db     *sqlx.DB
-	svc    struct {
+	repo   struct {
+		cve  cve.Repository
+		lock lock.Repository
+	}
+	svc struct {
 		update update.Service
 		get    get.Service
 	}
 }
 
-type appInitializer func(conf *config.Config) error
+// panic is normal
+type appInitializer func(conf *config.Config)
 
-func (a *app) init(conf *config.Config) error {
+func (a *app) init(conf *config.Config) {
 	initializers := []appInitializer{
 		a.initDB,
+		a.initRepositories,
 		a.initServices,
 		a.initHttp,
 	}
 
 	for _, initializer := range initializers {
-		err := initializer(conf)
-
-		if err != nil {
-			return err
-		}
+		initializer(conf)
 	}
-
-	return nil
 }
 
-func (a *app) initDB(conf *config.Config) error {
-	db, err := sqlx.Connect("pgx", conf.DBConn)
-	if err != nil {
-		return err
-	}
-
-	a.db = db
-
-	return nil
+func (a *app) initRepositories(*config.Config) {
+	a.repo.lock = lock.New(a.db)
+	a.repo.cve = cve.NewCVERepo(a.db)
 }
 
-func (a *app) initServices(*config.Config) error {
-	svcLock := lock.New(a.db)
-	cveRepo := cve.NewCVERepo(a.db)
-
-	a.svc.update = update.New(cveRepo, svcLock)
-	a.svc.get = get.New(cveRepo)
-
-	return nil
+func (a *app) initDB(conf *config.Config) {
+	a.db = sqlx.MustConnect("pgx", conf.DBConn)
 }
 
-func (a *app) initHttp(conf *config.Config) error {
+func (a *app) initServices(*config.Config) {
+	a.svc.update = update.New(a.repo.cve, a.repo.lock)
+	a.svc.get = get.New(a.repo.cve)
+}
+
+func (a *app) initHttp(conf *config.Config) {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -82,16 +76,14 @@ func (a *app) initHttp(conf *config.Config) error {
 
 	addr := fmt.Sprintf("%s:%s", conf.HttpAddr, conf.HttpPort)
 	r.Route("/api", func(r chi.Router) {
-		r.Get("/update", a.svc.update.PostUpdate)
-		r.Get("/cve/{id}", a.svc.get.GetById)
+		r.Get("/update", handler.PostUpdate(a.svc.update))
+		r.Get("/cve/{id}", handler.GetById(a.svc.get))
 	})
 
 	a.server = &http.Server{
 		Addr:    addr,
 		Handler: r,
 	}
-
-	return nil
 }
 
 func (a *app) runHttp() {
@@ -106,10 +98,13 @@ func (a *app) runHttp() {
 func Run(conf *config.Config) (err error) {
 	app := new(app)
 
-	err = app.init(conf)
-	if err != nil {
-		return
-	}
+	defer func() {
+		if p := recover(); err != nil {
+			log.Error().Interface("cause", p).Msg("panic")
+		}
+	}()
+
+	app.init(conf)
 	go app.runHttp()
 
 	c := make(chan os.Signal, 1)

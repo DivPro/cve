@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 	conf := new(config.Config)
 	fs := flag.NewFlagSet("main", flag.ExitOnError)
 	fs.StringVar(&conf.HttpAddr, config.NameAddr, config.DefaultAddr, "http addr")
