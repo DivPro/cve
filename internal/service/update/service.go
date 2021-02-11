@@ -30,7 +30,7 @@ func New(
 		cveRepo: db,
 		srvLock: srvLock,
 		sources: []source.Source{
-			source.NewDebian(),
+			//source.NewDebian(),
 			source.NewRedhat(),
 		},
 	}

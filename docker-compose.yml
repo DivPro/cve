@@ -1,15 +1,15 @@
 version: '3.5'
 
 services:
-  app:
-    container_name: cve-app
-    depends_on:
-      - postgres
-    build: .
-    ports:
-      - "8080:80"
-    command: ["/cve"]
-    restart: unless-stopped
+#  app:
+#    container_name: cve-app
+#    depends_on:
+#      - postgres
+#    build: .
+#    ports:
+#      - "8080:80"
+#    command: ["/cve"]
+#    restart: unless-stopped
   postgres:
     container_name: cve-db
     image: postgres
