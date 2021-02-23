@@ -1,6 +1,8 @@
 # CVE
 ## vulnerabilities aggregation service
 
+[![Build Status](https://travis-ci.com/DivPro/cve.svg?branch=master)](https://travis-ci.com/DivPro/cve)
+
 ### sources
 * debian :heavy_check_mark: [link](https://security-tracker.debian.org/tracker/) 
 * redhat :heavy_check_mark: [link](https://access.redhat.com/documentation/en-us/red_hat_security_data_api/1.0/html/red_hat_security_data_api/index) 
